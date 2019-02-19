@@ -36,9 +36,8 @@ class Actor:
 
         self.queue = queues[0]
         self.param_queue = queues[1]
-
         self.env = env
-        self.env_name = args.env_name
+        self.env_name = "env"
         self.num_episodes = args.num_episodes
         self.num_actors = args.num_actors
         self.frame_width = args.frame_width
@@ -98,10 +97,13 @@ class Actor:
         self.a, self.y, self.q, self.error = self.td_error_op()
 
         learner_params = self.param_queue.get()
+        #print(learner_params)
+        #print("================")
         shapes = self.get_params_shape(learner_params)
-
+        #print(shapes)
         self.ph_list = [tf.placeholder(tf.float32, shape=shapes[i]) for i in range(len(shapes))]
         self.target_ph_list = [tf.placeholder(tf.float32, shape=shapes[i]) for i in range(len(shapes))]
+        #assert False
         self.obtain_q_parameters = [self.q_network_weights[i].assign(self.ph_list[i]) for i in range(len(self.q_network_weights))]
         self.obtain_target_parameters = [self.target_network_weights[i].assign(self.target_ph_list[i]) for i in range(len(self.target_network_weights))]
 
@@ -155,20 +157,28 @@ class Actor:
 
 
     def build_network(self):
-        l_input = Input(shape=(4,84,84))
-        conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
-        conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
-        conv2d = Conv2D(64,3,strides=(1,1),activation='relu', data_format="channels_first")(conv2d)
-        fltn = Flatten()(conv2d)
-        v = Dense(512, activation='relu', name="dense_v1_"+str(self.num))(fltn)
-        v = Dense(1, name="dense_v2_"+str(self.num))(v)
-        adv = Dense(512, activation='relu', name="dense_adv1_"+str(self.num))(fltn)
-        adv = Dense(self.num_actions, name="dense_adv2_"+str(self.num))(adv)
-        y = concatenate([v,adv])
-        l_output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)), output_shape=(self.num_actions,))(y)
-        model = Model(input=l_input,output=l_output)
+        l_input = Input(shape=(1,)+self.env.observation_space.shape)
+        #l_input = Input(self.env.observation_space.shape)
+        fltn = Flatten()(l_input)
+        v = Dense(8, activation='relu', name="dense_v1")(fltn)
+        v = Dense(self.env.action_space.n, name="dense_v2")(v)
+        model = Model(input=l_input, output=v)
+        s = tf.placeholder(tf.float32, [None, 1, self.env.action_space.n])
 
-        s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
+        #l_input = Input(shape=(4,84,84))
+        #conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
+        #conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
+        #conv2d = Conv2D(64,3,strides=(1,1),activation='relu', data_format="channels_first")(conv2d)
+        #fltn = Flatten()(conv2d)
+        #v = Dense(512, activation='relu', name="dense_v1_"+str(self.num))(fltn)
+        #v = Dense(1, name="dense_v2_"+str(self.num))(v)
+        #adv = Dense(512, activation='relu', name="dense_adv1_"+str(self.num))(fltn)
+        #adv = Dense(self.num_actions, name="dense_adv2_"+str(self.num))(adv)
+        #y = concatenate([v,adv])
+        #l_output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)), output_shape=(self.num_actions,))(y)
+        #model = Model(input=l_input,output=l_output)
+
+        #s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
         q_values = model(s)
 
         return s, q_values, model
@@ -192,7 +202,8 @@ class Actor:
 
     def get_action_and_q(self, state):
         action = self.repeated_action
-        q = self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}, session=self.sess)
+        #q = self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}, session=self.sess)
+        q = self.q_values.eval(feed_dict={self.s: [np.float32(state)]}, session=self.sess)
         if self.t % self.action_interval == 0:
             if self.epsilon >= random.random():
                 action = random.randrange(self.num_actions)
@@ -203,8 +214,10 @@ class Actor:
         return action, q[0]
 
     def get_action_at_test(self, state):
+        print(state)
         action = self.repeated_action
-
+        print(action)
+        
         if self.t % self.action_interval == 0:
             if random.random() <= 0.05:
                 action = random.randrange(self.num_actions)
@@ -227,21 +240,26 @@ class Actor:
             terminal = False
             observation = self.env.reset()
             
-            for _ in range(random.randint(1, self.no_op_steps)):
-                last_observation = observation
-                observation, _, _, _ = self.env.step(0)  # Do nothing
-            state = self.get_initial_state(observation, last_observation)
+            #for _ in range(random.randint(1, self.no_op_steps)):
+            #    last_observation = observation
+            #    observation, _, _, _ = self.env.step(0)  # Do nothing
+            #state = self.get_initial_state(observation, last_observation)
+            state = np.array([observation for _ in range(self.state_length)])
             start = time.time()
 
             while not terminal:
                 last_observation = observation
+                print(state)
                 action, q = self.get_action_and_q(state)
 
                 observation, reward_ori, terminal, _ = self.env.step(action)
                 reward = np.sign(reward_ori)
                 #self.env.render(mode='rgb_array')
-                processed_observation = self.preprocess(observation, last_observation)
-                next_state = np.append(state[1:, :, :], processed_observation, axis=0)
+                #processed_observation = self.preprocess(observation, last_observation)
+                #next_state = np.append(state[1:, :, :], processed_observation, axis=0)
+                print(state.shape)
+                print(observation.shape)
+                next_state = np.append(state, observation, axis=0)
 
                 self.buffer.append((state, action, reward, next_state, terminal, q))
                 self.R = round((self.R + reward * self.gamma_n) / self.gamma,3)

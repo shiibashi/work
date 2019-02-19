@@ -37,7 +37,7 @@ def _parse_arg():
     parser.add_argument('--num_episodes', type=int, default=10000, help='number of episodes each agent plays')
     parser.add_argument('--frame_width', type=int, default=84, help='width of input frames')
     parser.add_argument('--frame_height', type=int, default=84, help='height of input frames')
-    parser.add_argument('--state_length', type=int, default=4, help='number of input frames')
+    parser.add_argument('--state_length', type=int, default=1, help='number of input frames')
     parser.add_argument('--n_step', type=int, default=3, help='n step bootstrap target')
     parser.add_argument('--gamma', type=float, default=0.99, help='discount factor')
 

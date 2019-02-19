@@ -174,20 +174,27 @@ class Learner:
 
 
     def build_network(self):
-        l_input = Input(shape=(4,84,84))
-        conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
-        conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
-        conv2d = Conv2D(64,3,strides=(1,1),activation='relu', data_format="channels_first")(conv2d)
-        fltn = Flatten()(conv2d)
-        v = Dense(512, activation='relu', name="dense_v1")(fltn)
-        v = Dense(1, name="dense_v2")(v)
-        adv = Dense(512, activation='relu', name="dense_adv1")(fltn)
-        adv = Dense(self.num_actions, name="dense_adv2")(adv)
-        y = concatenate([v,adv])
-        l_output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)), output_shape=(self.num_actions,))(y)
-        model = Model(input=l_input,output=l_output)
+        l_input = Input(shape=(1,)+self.env.observation_space.shape)
+        fltn = Flatten()(l_input)
+        v = Dense(8, activation='relu', name="dense_v1")(fltn)
+        v = Dense(self.env.action_space.n, name="dense_v2")(v)
+        model = Model(input=l_input, output=v)
+        s = tf.placeholder(tf.float32, [None, 1, self.env.action_space.n])
 
-        s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
+        #l_input = Input(shape=(4,84,84))
+        #conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
+        #conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
+        #conv2d = Conv2D(64,3,strides=(1,1),activation='relu', data_format="channels_first")(conv2d)
+        #fltn = Flatten()(conv2d)
+        #v = Dense(512, activation='relu', name="dense_v1_"+str(self.num))(fltn)
+        #v = Dense(1, name="dense_v2_"+str(self.num))(v)
+        #adv = Dense(512, activation='relu', name="dense_adv1_"+str(self.num))(fltn)
+        #adv = Dense(self.num_actions, name="dense_adv2_"+str(self.num))(adv)
+        #y = concatenate([v,adv])
+        #l_output = Lambda(lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)), output_shape=(self.num_actions,))(y)
+        #model = Model(input=l_input,output=l_output)
+
+        #s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
         q_values = model(s)
 
         return s, q_values, model
