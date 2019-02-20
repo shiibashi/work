@@ -183,22 +183,6 @@ class Actor:
 
         return s, q_values, model
 
-    def get_initial_state(self, observation, last_observation):
-        # 初期状態のパターンを生成
-        #print(observation) # [0.333, 0.123123]
-        #print(last_observation) # [0.12312, 0.231231]
-        #processed_observation = np.maximum(observation, last_observation)
-        #processed_observation = np.uint8(resize(rgb2gray(processed_observation), (self.frame_width, #self.frame_height)) * 255)
-        #state = [processed_observation for _ in range(self.state_length)]
-        #return np.stack(state, axis=0)
-        return observation
-
-    def preprocess(self, observation, last_observation):
-        processed_observation = np.maximum(observation, last_observation)
-        processed_observation = np.uint8(resize(rgb2gray(processed_observation), (self.frame_width, self.frame_height)) * 255)
-        return np.reshape(processed_observation, (1, self.frame_width, self.frame_height))
-
-
 
     def get_action_and_q(self, state):
         action = self.repeated_action
@@ -214,9 +198,7 @@ class Actor:
         return action, q[0]
 
     def get_action_at_test(self, state):
-        print(state)
         action = self.repeated_action
-        print(action)
         
         if self.t % self.action_interval == 0:
             if random.random() <= 0.05:
@@ -239,27 +221,16 @@ class Actor:
         for _ in range(self.num_episodes):
             terminal = False
             observation = self.env.reset()
-            
-            #for _ in range(random.randint(1, self.no_op_steps)):
-            #    last_observation = observation
-            #    observation, _, _, _ = self.env.step(0)  # Do nothing
-            #state = self.get_initial_state(observation, last_observation)
-            state = np.array([observation for _ in range(self.state_length)])
+            state = np.array([observation])
             start = time.time()
 
             while not terminal:
                 last_observation = observation
-                print(state)
                 action, q = self.get_action_and_q(state)
 
                 observation, reward_ori, terminal, _ = self.env.step(action)
                 reward = np.sign(reward_ori)
-                #self.env.render(mode='rgb_array')
-                #processed_observation = self.preprocess(observation, last_observation)
-                #next_state = np.append(state[1:, :, :], processed_observation, axis=0)
-                print(state.shape)
-                print(observation.shape)
-                next_state = np.append(state, observation, axis=0)
+                next_state = np.array([observation])
 
                 self.buffer.append((state, action, reward, next_state, terminal, q))
                 self.R = round((self.R + reward * self.gamma_n) / self.gamma,3)
@@ -292,6 +263,8 @@ class Actor:
 
                     for _ in range(self.send_size):
                         data = self.local_memory.popleft()
+                        #print(data[3])
+                        #print("____")
                         state_batch.append(data[0])
                         action_batch.append(data[1])
                         reward_batch.append(data[2])
@@ -303,8 +276,9 @@ class Actor:
 
                     #remote_memory.extend(send)
                     terminal_batch = np.array(terminal_batch) + 0
-                    # shape = (BATCH_SIZE, num_actions)
-                    target_q_values_batch = self.target_q_values.eval(feed_dict={self.st: np.float32(np.array(next_state_batch) / 255.0)}, session=self.sess)
+                    target_q_values_batch = self.target_q_values.eval(
+                        feed_dict={self.st: np.float32(np.array(next_state_batch))},
+                        session=self.sess)
                     # DDQN
                     actions = np.argmax(qn_batch, axis=1)
                     target_q_values_batch = np.array([target_q_values_batch[i][action] for i, action in enumerate(actions)])
@@ -312,7 +286,7 @@ class Actor:
                     y_batch = reward_batch + (1 - terminal_batch) * self.gamma_n * target_q_values_batch
 
                     error_batch = self.error.eval(feed_dict={
-                        self.s: np.float32(np.array(state_batch) / 255.0),
+                        self.s: np.float32(np.array(state_batch)),
                         self.a: action_batch,
                         self.q: q_batch,
                         self.y: y_batch
@@ -337,7 +311,7 @@ class Actor:
                     self.epsilon -= self.epsilon_step
 
                 self.total_reward += reward_ori
-                self.total_q_max += np.max(self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}, session=self.sess))
+                self.total_q_max += np.max(self.q_values.eval(feed_dict={self.s: [np.float32(state)]}, session=self.sess))
                 self.duration += 1
 
             elapsed = time.time() - start

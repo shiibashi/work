@@ -11,9 +11,10 @@ def make_dataset():
     profit = []
     for x, y in zip(df["x"], df["y"]):
         r = numpy.random.rand()
+        p = numpy.random.rand()
         if x >= y * 2:
             profit.append(r)
-        elif x >= y and r >= 0.5:
+        elif x >= y and p >= 0.5:
             profit.append(r)
         else:
             profit.append(-r)
