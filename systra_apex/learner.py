@@ -82,14 +82,8 @@ class Learner:
                  max_queue_no_added=2000
                  ):
         self.env = env
-        self.env_name = "env"
-        self.load = args.load
-        self.save_network_path = args.network_path
         self.replay_memory_size = args.replay_memory_size
         self.initial_memory_size = args.initial_memory_size
-        self.frame_width = args.frame_width
-        self.frame_height = args.frame_height
-        self.state_length = args.state_length
         # self.n_step = args.n_step
         # self.gamma = args.gamma
         self.gamma_n = args.gamma**args.n_step
@@ -149,10 +143,6 @@ class Learner:
         with tf.device("/cpu:0"):
             self.saver = tf.train.Saver(self.q_network_weights)
 
-        # Load network
-        if self.load:
-            self.load_network()
-
         params = self.sess.run((self.q_network_weights, self.target_network_weights))
         while not self.param_queue.full():
             self.param_queue.put(params)
@@ -175,12 +165,27 @@ class Learner:
 
     def build_network(self):
         l_input = Input(shape=(1,)+self.env.observation_space.shape)
+        #l_input = Input(self.env.observation_space.shape)
         fltn = Flatten()(l_input)
+        
         v = Dense(8, activation='relu', name="dense_v1")(fltn)
-        v = Dense(self.env.action_space.n, name="dense_v2")(v)
-        model = Model(input=l_input, output=v)
+        v = Dense(1)(v)
+
+        adv = Dense(8, activation='relu', name="dense_adv1")(fltn)
+        adv = Dense(self.env.action_space.n, name="dense_adv2")(adv)
+
+        y = concatenate([v,adv])
+        l_output = Lambda(
+            lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)),
+            output_shape=(self.env.action_space.n,))(y)
+        
+        #v = Dense(self.env.action_space.n, name="dense_v2")(v)
+        
+        #model = Model(input=l_input, output=v)
+        model = Model(input=l_input, output=l_output)
         s = tf.placeholder(tf.float32, [None, 1, self.env.action_space.n])
 
+        q_values = model(s)
         #l_input = Input(shape=(4,84,84))
         #conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
         #conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
@@ -195,7 +200,6 @@ class Learner:
         #model = Model(input=l_input,output=l_output)
 
         #s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
-        q_values = model(s)
 
         return s, q_values, model
 
@@ -230,7 +234,9 @@ class Learner:
         return a, y, tf.abs(td_error), loss, grad_update ,grads_and_vars, capped_gvs
 
     def load_network(self):
-        checkpoint = tf.train.get_checkpoint_state(self.save_network_path)
+        """推論時に読み込む用
+        """
+        checkpoint = tf.train.get_checkpoint_state(self.save_network_path) # save_network_path=save
         if checkpoint and checkpoint.model_checkpoint_path:
             self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
             print('Successfully loaded: ' + checkpoint.model_checkpoint_path)
@@ -294,28 +300,35 @@ class Learner:
                 next_state_batch.append(data[3])
                 terminal_batch.append(data[4])
 
-                self.total_q_max += np.max(self.q_values.eval(feed_dict={self.s: [np.float32(data[0] / 255.0)]},session=self.sess))
+                self.total_q_max += np.max(self.q_values.eval(feed_dict={self.s: [np.float32(data[0])]},session=self.sess))
 
             # Convert True to 1, False to 0
             terminal_batch = np.array(terminal_batch) + 0
             # shape = (BATCH_SIZE, num_actions)
-            target_q_values_batch = self.target_q_values.eval(feed_dict={self.st: np.float32(np.array(next_state_batch) / 255.0)}, session=self.sess)
+            target_q_values_batch = self.target_q_values.eval(
+                feed_dict={self.st: np.float32(np.array(next_state_batch))},
+                session=self.sess
+            )
             # DDQN
-            actions = np.argmax(self.q_values.eval(feed_dict={self.s: np.float32(np.array(next_state_batch) / 255.0)}, session=self.sess), axis=1)
+            actions = np.argmax(self.q_values.eval(
+                feed_dict={self.s: np.float32(np.array(next_state_batch))},
+                session=self.sess),
+                axis=1
+            )
             target_q_values_batch = np.array([target_q_values_batch[i][action] for i, action in enumerate(actions)])
             # shape = (BATCH_SIZE,)
             y_batch = reward_batch + (1 - terminal_batch) * self.gamma_n * target_q_values_batch
 
 
             error_batch = self.error_abs.eval(feed_dict={
-                self.s: np.float32(np.array(state_batch) / 255.0),
+                self.s: np.float32(np.array(state_batch)),
                 self.a: action_batch,
                 self.y: y_batch
             }, session=self.sess)
 
 
             loss, _ = self.sess.run([self.loss, self.grad_update], feed_dict={
-                self.s: np.float32(np.array(state_batch) / 255.0),
+                self.s: np.float32(np.array(state_batch)),
                 self.a: action_batch,
                 self.y: y_batch
                 #self.w: w_batch
@@ -334,8 +347,8 @@ class Learner:
                 text_l = 'AVERAGE LOSS: {0:.5F} / AVG_MAX_Q: {1:2.4F} / LEARN PER SECOND: {2:.1F} / NUM LEARN: {3:5d}'.format(
                     self.total_loss/self.print_interval, self.total_q_max/(self.print_interval*self.batch_size), self.print_interval/self.total_time, self.t)
                 print(text_l)
-                with open(self.env_name+'_output.txt','a') as f:
-                    f.write(text_l+"\n")
+                #with open('log.txt','a') as f:
+                #    f.write(text_l+"\n")
                 #print("Average Loss: ", self.total_loss/PRINT_LOSS_INTERVAL, " / Learn Per Second: ", PRINT_LOSS_INTERVAL/self.total_time, " / AVG_MAX_Q", self.total_q_max/(PRINT_LOSS_INTERVAL*BATCH_SIZE))
                 self.total_loss = 0
                 self.total_time = 0
@@ -351,7 +364,7 @@ class Learner:
 
             # Save network
             if self.t % self.save_interval == 0:
-                save_path = self.saver.save(self.sess, self.save_network_path + '/' + self.env_name, global_step=(self.t))
+                save_path = self.saver.save(self.sess, 'save/env', global_step=(self.t))
                 print('Successfully saved: ' + save_path)
 
 

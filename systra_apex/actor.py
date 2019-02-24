@@ -37,12 +37,8 @@ class Actor:
         self.queue = queues[0]
         self.param_queue = queues[1]
         self.env = env
-        self.env_name = "env"
-        self.num_episodes = args.num_episodes
         self.num_actors = args.num_actors
-        self.frame_width = args.frame_width
-        self.frame_height = args.frame_height
-        self.state_length = args.state_length
+        self.num_episodes = args.num_episodes
         self.n_step = args.n_step
         self.gamma = args.gamma
         self.gamma_n = self.gamma**self.n_step
@@ -160,11 +156,25 @@ class Actor:
         l_input = Input(shape=(1,)+self.env.observation_space.shape)
         #l_input = Input(self.env.observation_space.shape)
         fltn = Flatten()(l_input)
+        
         v = Dense(8, activation='relu', name="dense_v1")(fltn)
-        v = Dense(self.env.action_space.n, name="dense_v2")(v)
-        model = Model(input=l_input, output=v)
+        v = Dense(1)(v)
+
+        adv = Dense(8, activation='relu', name="dense_adv1")(fltn)
+        adv = Dense(self.env.action_space.n, name="dense_adv2")(adv)
+
+        y = concatenate([v,adv])
+        l_output = Lambda(
+            lambda a: K.expand_dims(a[:, 0], -1) + a[:, 1:] - tf.stop_gradient(K.mean(a[:,1:],keepdims=True)),
+            output_shape=(self.env.action_space.n,))(y)
+        
+        #v = Dense(self.env.action_space.n, name="dense_v2")(v)
+        
+        #model = Model(input=l_input, output=v)
+        model = Model(input=l_input, output=l_output)
         s = tf.placeholder(tf.float32, [None, 1, self.env.action_space.n])
 
+        q_values = model(s)
         #l_input = Input(shape=(4,84,84))
         #conv2d = Conv2D(32,8,strides=(4,4),activation='relu', data_format="channels_first")(l_input)
         #conv2d = Conv2D(64,4,strides=(2,2),activation='relu', data_format="channels_first")(conv2d)
@@ -179,8 +189,8 @@ class Actor:
         #model = Model(input=l_input,output=l_output)
 
         #s = tf.placeholder(tf.float32, [None, self.state_length, self.frame_width, self.frame_height])
-        q_values = model(s)
-
+        
+        
         return s, q_values, model
 
 
@@ -197,20 +207,6 @@ class Actor:
 
         return action, q[0]
 
-    def get_action_at_test(self, state):
-        action = self.repeated_action
-        
-        if self.t % self.action_interval == 0:
-            if random.random() <= 0.05:
-                action = random.randrange(self.num_actions)
-            else:
-                action = np.argmax(self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}))
-            self.repeated_action = action
-
-        self.t += 1
-
-        return action
-
     def get_sample(self, n):
         s, a, _, _, _, q = self.buffer[0]
         _, _, _, s_, done, q_ = self.buffer[n-1]
@@ -223,7 +219,6 @@ class Actor:
             observation = self.env.reset()
             state = np.array([observation])
             start = time.time()
-
             while not terminal:
                 last_observation = observation
                 action, q = self.get_action_and_q(state)
@@ -311,21 +306,22 @@ class Actor:
                     self.epsilon -= self.epsilon_step
 
                 self.total_reward += reward_ori
+                #action = np.argmax(self.q_values.eval(feed_dict={self.s: [np.float32(state / 255.0)]}))
                 self.total_q_max += np.max(self.q_values.eval(feed_dict={self.s: [np.float32(state)]}, session=self.sess))
                 self.duration += 1
 
             elapsed = time.time() - start
 
-            text = 'EPISODE: {0:6d} / ACTOR: {1:3d} / TOTAL_STEPS: {2:8d} / STEPS: {3:5d} / EPSILON: {4:.5f} / TOTAL_REWARD: {5:3.0f} / MAX_Q_AVG: {6:2.4f} / STEPS_PER_SECOND: {7:.1f}'.format(
-                self.episode + 1, self.num, self.t, self.duration, self.epsilon,
+            text = 'EPISODE: {0:6d} / ACTOR: {1:3d} / TOTAL_STEPS: {2:8d} / EPSILON: {3:.5f} / TOTAL_REWARD: {4:3.0f} / MAX_Q_AVG: {5:2.4f} / STEPS_PER_SECOND: {6:.1f}'.format(
+                self.episode + 1, self.num, self.duration, self.epsilon,
                 self.total_reward, self.total_q_max / float(self.duration),
                 self.duration/elapsed)
 
             print(text)
 
 
-            with open(self.env_name+'_output.txt','a') as f:
-                f.write(text+"\n")
+            #with open('log.txt','a') as f:
+            #    f.write(text+"\n")
 
             self.total_reward = 0
             self.total_q_max = 0
