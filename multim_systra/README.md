@@ -12,7 +12,7 @@ bert-serving-start -model_dir model/cased_L-12_H-768_A-12/ \
 ```
 
 # Python
-3.6.5
+3.7.3
 ```
 pip install -r requirement.txt
 ```
