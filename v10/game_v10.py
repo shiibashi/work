@@ -1,58 +1,75 @@
 import gym
 import numpy
+import pandas
 import random
 import os
 
 class GameV10(gym.Env):
     metadata = {'render.modes': ['human', 'rgb_array']}
     
-    def __init__(self, mode="dev"):
-        self.data_dir = "histday_sample" if mode=="dev" else "histday"
-        self.code_list = os.listdir(self.data_dir)
-        self.columns = ["close", "high", "low", "open", "volume"]
+    def __init__(self, mode="train"):
+        self.data_dir = "data/sample_train" if mode=="train" else "data/sample_test"
+        self.filename_list = os.listdir(self.data_dir)
         
-        lb = numpy.array([1, 1, 1])
-        ub = numpy.array([0, 0, 0])
+        self.columns = ["f1", "f2"]
+        
+        lb = numpy.array([1, 1, -1])
+        ub = numpy.array([0, 0, 2])
         self.observation_space = gym.spaces.Box(lb, ub, dtype=numpy.float32)
-        self.action_space = gym.spaces.Discrete(2) # 0: stay, 1: long
+        self.action_space = gym.spaces.Discrete(3) # 0: stay, 1: long, 2: short
         
-        self.seed()
+        #self.seed()
         self.state = None
         
         self.time = None
         self.code = None
         self.code_data = None
-        self.fund = None
+        self.power = None
                 
     def seed(self, seed=None):
-        self.numpy_random, seed = gym.utils.seeding.numpy_random(seed)
+        self.numpy_random, seed = gym.utils.seeding.np_random(seed)
         return [seed]
         
     def step(self, action):
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         reward = self.reward(action, self.time, self.code_data)
-        done = self.done_flag(self.time, self.code_data)
         self.time += 1
+        self.cut_line += 0.001
+        done = self.done_flag(self.time, self.code_data)
         next_obj = self.observation(self.time, self.code_data)
         return next_obj, reward, done, {}
         
     def reset(self):
-        code = random.sample(self.code_list, 1)[0]
-        code_data = self._load_code_data(code)
+        filename = random.sample(self.filename_list, 1)[0]
+        code_data = self._load_code_data(filename)
+        #code_data = self.all_df.sample(300).reset_index(drop=True)
         self.time = 0
-        self.code = code
+        self.code = filename.split(".")[0]
         self.code_data = code_data
-        self.fund = 1
+        self.power = 1
+        self.cut_line = 1
         return self.observation(self.time, self.code_data)
 
     def observation(self, time, df):
-        return numpy.array([df[col][time] for col in self.columns])
+        feature = numpy.array([df[col][time] for col in self.columns])
+        status = numpy.array([self.power - self.cut_line])
+        s = len(feature) + len(status)
+        obs = numpy.concatenate([feature, status]).reshape(1, s)
+        #return numpy.array([[df[col][time] for col in self.columns]])
+        return obs
         
     def reward(self, action, time, df):
-        return 1
+        profit = self.code_data["profit"][time]
+        if action == 2: # short
+            action = -1
+        self.power += profit * action
+        if action == 0: # stay:
+            self.cut_line += 0.002
+        return max(0, self.power - self.cut_line)
+
         
     def done_flag(self, time, df):
-        if time < len(df) or self.fund >= 0.7:
+        if time < len(df) - 1 and self.power >= self.cut_line - 0.02:
             return False
         else:
             return True
@@ -63,15 +80,6 @@ class GameV10(gym.Env):
     def close(self):
         pass
         
-    def _load_code_data(self, code):
-        dtype = {
-            "code": object,
-            "date": object,
-            "close": float,
-            "high": float,
-            "low": float,
-            "open": float,
-            "volume": float
-        }
-        code_data = pandas.read_csv("{}/{}.csv".format(self.data_dir, code), dtype=dtype)
-        return code_data
+    def _load_code_data(self, filename):
+        df = pandas.read_csv("{}/{}".format(self.data_dir, filename))
+        return df
