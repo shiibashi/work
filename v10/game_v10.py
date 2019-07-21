@@ -7,8 +7,9 @@ import os
 class GameV10(gym.Env):
     metadata = {'render.modes': ['human', 'rgb_array']}
     
-    def __init__(self, mode="train"):
+    def __init__(self, mode="train", random_data=True):
         self.data_dir = "data/sample_train" if mode=="train" else "data/sample_test"
+        self.random_data = random_data
         self.filename_list = os.listdir(self.data_dir)
         
         self.columns = ["f1", "f2"]
@@ -40,7 +41,10 @@ class GameV10(gym.Env):
         return next_obj, reward, done, {}
         
     def reset(self):
-        filename = random.sample(self.filename_list, 1)[0]
+        if self.random_data:
+            filename = random.sample(self.filename_list, 1)[0]
+        else:
+            filename = "0500.csv"
         code_data = self._load_code_data(filename)
         #code_data = self.all_df.sample(300).reset_index(drop=True)
         self.time = 0
@@ -62,9 +66,11 @@ class GameV10(gym.Env):
         profit = self.code_data["profit"][time]
         if action == 2: # short
             action = -1
-        self.power += profit * action
-        if action == 0: # stay:
-            self.cut_line += 0.002
+        
+        if self.power - self.cut_line >= 0.5 and profit * action < 0:
+            self.power += profit * action * 10
+        else:
+            self.power += profit * action
         return max(0, self.power - self.cut_line)
 
         

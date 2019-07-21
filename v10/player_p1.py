@@ -1,7 +1,5 @@
 import numpy
-#from keras.layers import Dense
-#from keras.models import Sequential
-#from keras.optimizers import SGD
+
 
 import keras
 from keras.layers.core import Dense, Activation, Flatten
@@ -22,13 +20,6 @@ class PlayerP1(object):
         actor, critic = self.build()
         self.actor = actor
         self.critic = critic
-        
-        #self.actor = self.build_actor()
-        #self.critic = self.build_critic()
-
-        #if self.load_model:
-        #    self.actor.load_weights("./save_model/cartpole_actor.h5")
-        #    self.critic.load_weights("./save_model/cartpole_critic.h5")
     
     """
     def build(self):
@@ -52,13 +43,13 @@ class PlayerP1(object):
     
     def build(self):
         actor = Sequential()
-        actor.add(Dense(8, input_dim=self.state_size, activation='relu'))
+        actor.add(Dense(2, input_dim=self.state_size, activation='relu'))
         actor.add(Dense(self.action_size, activation='softmax'))
         actor.summary()
         actor.compile(SGD(), loss='categorical_crossentropy')
 
         critic = Sequential()
-        critic.add(Dense(8, input_dim=self.state_size, activation='relu'))
+        critic.add(Dense(2, input_dim=self.state_size, activation='relu'))
         critic.add(Dense(self.value_size, activation='linear'))
         critic.summary()
         critic.compile(SGD(), loss="mse")
@@ -66,30 +57,38 @@ class PlayerP1(object):
     
 
     def get_action(self, state):
-        if numpy.random.rand() <= 0.1:
-            return numpy.random.choice(self.action_size, 1)[0]        
+        #if numpy.random.rand() <= 0.1:
+        #    return numpy.random.choice(self.action_size, 1)[0]        
         policy = self.actor.predict(state, batch_size=1).flatten()
-        return numpy.random.choice(self.action_size, 1, p=policy)[0]
+        noise = numpy.random.uniform(0, 1, self.action_size)
+        p = (policy + noise) / (policy + noise).sum()
+        return numpy.random.choice(self.action_size, 1, p=p)[0]
 
     def get_action_prob(self, state):
         policy = self.actor.predict(state, batch_size=1).flatten()
         return policy
 
         
-    def train_model(self, state, action, reward, next_state, done):
-        target = numpy.zeros((1, self.value_size))
-        advantages = numpy.zeros((1, self.action_size))
+    def train_model(self, states, actions, rewards, next_states, dones):
+        length = len(states)
+        target = numpy.zeros((length, self.value_size))
+        advantages = numpy.zeros((length, self.action_size))
+        #print(states)
+        values = self.critic.predict(states)
+        next_values = self.critic.predict(next_states)
 
-        value = self.critic.predict(state)[0]
-        next_value = self.critic.predict(next_state)[0]
+        for i, done in enumerate(dones):
+            action = actions[i]
+            reward = rewards[i]
+            value = values[i]
+            next_value = next_values[i]
+            if done:
+                advantages[i][action] = reward - value
+                target[i][0] = reward
+            else:
+                r = 0.9
+                advantages[i][action] = reward + r * (next_value) - value
+                target[i][0] = reward + r * next_value
 
-        if done:
-            advantages[0][action] = reward - value
-            target[0][0] = reward
-        else:
-            r = 0.99
-            advantages[0][action] = reward + r * (next_value) - value
-            target[0][0] = reward + r * next_value
-
-        self.actor.fit(state, advantages, epochs=1, verbose=0)
-        self.critic.fit(state, target, epochs=1, verbose=0)
+        self.actor.fit(states, advantages, epochs=1, verbose=0)
+        self.critic.fit(states, target, epochs=1, verbose=0)
