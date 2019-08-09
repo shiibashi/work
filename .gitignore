@@ -2,3 +2,5 @@ blog
 blog.txt
 *.ipynb_checkpoints
 *__pycache__
+v10/histday/*.csv
+
