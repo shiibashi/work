@@ -1,4 +1,0 @@
-model_checkpoint_path: "env-150000"
-all_model_checkpoint_paths: "env-50000"
-all_model_checkpoint_paths: "env-100000"
-all_model_checkpoint_paths: "env-150000"
