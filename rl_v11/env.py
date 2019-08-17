@@ -5,7 +5,8 @@ import os
 
 class Env(object):
     def __init__(self, df):
-        self.df = df
+        self.dataset = df
+        self.episode_df = None
         
         self.columns = ["Open_MA_5_N", "Open_MA_25_N", "Open_MA_75_N", "Open_R_1"]
         self.target = "Profit"
@@ -19,27 +20,30 @@ class Env(object):
         self.time = None
         self.capability = None
         self.cut_line = None
-        
+                
     def step(self, action):
-        reward = self.reward(action, self.df, self.time)
+        reward = self.reward(action, self.episode_df, self.time)
         self.time += 1
-        self.cut_line += 0.01
-        done = self.done_flag(self.df, self.time)
-        next_obs = self.observation(self.df, self.time)
+        done = self.done_flag(self.episode_df, self.time)
+        next_obs = self.observation(self.episode_df, self.time)
         return next_obs, reward, done, {}
         
     def reset(self):
         self.time = 0
         self.capability = 1
-        self.cut_line = 1
-        return self.observation(self.df, self.time)
+        self.cut_line = 0.9
+        
+        episode_length = 24 * 14
+        index = numpy.random.randint(len(self.dataset) - episode_length)
+        self.episode_df = self.dataset[index:index+episode_length].reset_index(drop=True)
+        return self.observation(self.episode_df, self.time)
 
     def observation(self, df, time):
         feature = numpy.array([df[col][time] for col in self.columns])
         status = numpy.array([self.capability - self.cut_line])
         s = len(feature) + len(status)
         csv_arr = numpy.concatenate([feature, status]).reshape(1, s)
-        img_arr = self._load_chart_img(self.df, time)
+        img_arr = self._load_chart_img(self.episode_df, time)
         obs = (csv_arr, img_arr)
         return obs
         
@@ -52,7 +56,7 @@ class Env(object):
         return max(0, self.capability - self.cut_line)
         
     def done_flag(self, df, time):
-        if time < len(df) - 1 and self.capability >= self.cut_line - 0.2:
+        if time < len(df) - 1 and self.capability >= self.cut_line:
             return False
         else:
             return True
