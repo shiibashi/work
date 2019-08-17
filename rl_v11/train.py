@@ -1,0 +1,101 @@
+from env import Env
+from player import Player
+import numpy
+import pandas
+from collections import deque
+import random
+import plot_log
+
+class Logger(object):
+    def __init__(self):
+        self.train_log = []
+        self.test_log = []
+        
+    def append_train_log(self, d):
+        self.train_log.append(d)
+
+    def append_test_log(self, d):
+        self.test_log.append(d)
+
+        
+def run(player, env, logger,
+        episode=100, batch_size=32, memory_size=1024, test_env=None):
+    exp = deque(maxlen=memory_size)
+    for e in range(episode):
+        if e % 100 == 0:
+            print(e)
+        done= False
+        capability_list = []
+        state = env.reset()
+        while not done:
+            action = player.get_action(state)
+            next_state, reward, done, info = env.step(action)
+            exp.append((state, action, reward, next_state, done))
+            state = next_state
+            capability_list.append(env.capability)
+        if len(exp) >= memory_size:
+            #return exp
+            states, actions, rewards, next_states, dones = select_batch(exp, batch_size)
+            player.train_model(states, actions, rewards, next_states, dones)
+
+        logger.append_train_log(capability_list)
+
+        if test_env is not None:
+            p = validation(player, test_env)
+            logger.append_test_log(p)
+        
+def validation(player, env):
+    done= False
+    capability_list = []
+    state = env.reset()
+    while not done:
+        action_prob = player.get_action_prob(state)
+        action = numpy.argmax(action_prob)
+        next_state, reward, done, info = env.step(action)
+        state = next_state
+        capability_list.append(env.capability)
+    return capability_list
+    
+        
+def select_batch(exp, batch_size):
+    tpls = random.sample(exp, batch_size)
+    csv = [t[0][0] for t in tpls]
+    img = [t[0][1] for t in tpls]
+    actions = [t[1] for t in tpls]
+    rewards = [t[2] for t in tpls]
+    next_csv = [t[3][0] for t in tpls]
+    next_img = [t[3][1] for t in tpls]
+    dones = [t[4] for t in tpls]
+    states = (_v(csv), _v(img))
+    next_states = (_v(next_csv), _v(next_img))
+    return states, _v(actions), _v(rewards), next_states, _v(dones)
+
+def _v(arr_list):
+    # explode
+    arr = numpy.vstack([v for v in arr_list])
+    return arr
+
+
+def load_dataset():
+    df = pandas.read_csv("dataset/feature.csv")
+    train_df = df[10000:20000].reset_index(drop=True)
+    test_df = df[20000:].reset_index(drop=True)
+    return train_df, test_df
+
+
+def train():
+    train_df, test_df = load_dataset()
+
+    train_env = Env(train_df)
+    test_env = Env(test_df)
+    action_size, csv_size, img_size = train_env.action_size, train_env.csv_size, train_env.img_size
+    player = Player(action_size, csv_size, img_size)
+    logger = Logger()
+    run(player, train_env, logger, episode=1000, batch_size=4, memory_size=1024, test_env=test_env)
+
+    player.actor.save_weights("model/actor_weight.h5")
+    player.critic.save_weights("model/critic_weight.h5")
+    plot_log.plot(logger)
+
+if __name__ == "__main__":
+    train()
