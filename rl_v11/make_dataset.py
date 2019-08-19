@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 import mpl_finance
 import gc
 import os
+from concurrent.futures import ThreadPoolExecutor
+
 
 class PipeLine(object):
     def __init__(self):
@@ -22,10 +24,10 @@ class PipeLine(object):
         
     def append_feature(self, df):
         df = df.copy()
-        df["Open_MA_5"] = df["Open"].rolling(5*24).mean()
-        df["Open_MA_25"] = df["Open"].rolling(25*24).mean()
-        df["Open_MA_75"] = df["Open"].rolling(75*24).mean()
-        df["Volume_MA_5"] = df["Volume"].rolling(5*24).mean()
+        df["Open_MA_5"] = df["Open"].rolling(5).mean()
+        df["Open_MA_25"] = df["Open"].rolling(25).mean()
+        df["Open_MA_75"] = df["Open"].rolling(75).mean()
+        df["Volume_MA_5"] = df["Volume"].rolling(5).mean()
         df["Profit"] = df["Open"].pct_change(1).shift(-1)
         return df
 
@@ -73,10 +75,11 @@ def _append_feature(df):
     df = df.copy()
     df["Date"] = df["Year"].apply(str) +"-"+ df["Month"].apply(lambda x: str(x).zfill(2)) +"-"+ df["Day"].apply(lambda x: str(x).zfill(2))
 
-    df["Open_MA_5"] = df["Open"].rolling(5*24).mean()
-    df["Open_MA_25"] = df["Open"].rolling(25*24).mean()
-    df["Open_MA_75"] = df["Open"].rolling(75*24).mean()
+    df["Open_MA_5"] = df["Open"].rolling(5).mean()
+    df["Open_MA_25"] = df["Open"].rolling(25).mean()
+    df["Open_MA_75"] = df["Open"].rolling(75).mean()
     df["Volume_MA_5"] = df["Volume"].rolling(5).mean()
+    
     return df
 
 if __name__ == "__main__":
@@ -95,9 +98,24 @@ if __name__ == "__main__":
         pass
 
     file_list = os.listdir("dataset/img")
-    for i in range(len(feature)-24*5):
-        chart_data = feature[i:i+24*5]
+    import time
+    def _task(i):
+        if i % 1000 == 0:
+            print(i, flush=True)
+        chart_data = feature[i:i+24*7].reset_index(drop=True)
         ts_2 = chart_data["Timestamp"].values[-1]
         filename = "{}.png".format(ts_2)
+        #print(feature[i:i+24*5])
+        #chart_data.to_csv("a.csv")
+        #assert False
         if filename not in file_list:
-            save_candlestick_img_with_volume(feature[i:i+24*5], "dataset/img/{}".format(filename))
+            save_candlestick_img_with_volume(chart_data, "dataset/img/{}".format(filename))
+
+    #print("iteration: {}".format(len(feature)-24*5), flush=True)
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for i in range(len(feature)-24*5):
+            executor.submit(_task, i)
+
+    #for i in range(len(feature)-24*5):
+        #_task(i)
+        #time.sleep(1)

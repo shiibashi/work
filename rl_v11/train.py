@@ -10,6 +10,7 @@ class Logger(object):
     def __init__(self):
         self.train_log = []
         self.test_log = []
+        self.test2_log = []
         
     def append_train_log(self, d):
         self.train_log.append(d)
@@ -17,13 +18,16 @@ class Logger(object):
     def append_test_log(self, d):
         self.test_log.append(d)
 
+    def append_test2_log(self, d):
+        self.test2_log.append(d)
+
         
 def run(player, env, logger,
         episode=100, batch_size=32, memory_size=1024, test_env=None):
     exp = deque(maxlen=memory_size)
     for e in range(episode):
         if e % 100 == 0:
-            print(e)
+            print(e, flush=True)
         done= False
         capability_list = []
         state = env.reset()
@@ -43,11 +47,13 @@ def run(player, env, logger,
         if test_env is not None:
             p = validation(player, test_env)
             logger.append_test_log(p)
+            p2 = validation(player, test_env, index=0)
+            logger.append_test2_log(p2)
         
-def validation(player, env):
+def validation(player, env, index=None):
     done= False
     capability_list = []
-    state = env.reset()
+    state = env.reset(index)
     while not done:
         action_prob = player.get_action_prob(state)
         action = numpy.argmax(action_prob)
@@ -91,7 +97,7 @@ def train():
     action_size, csv_size, img_size = train_env.action_size, train_env.csv_size, train_env.img_size
     player = Player(action_size, csv_size, img_size)
     logger = Logger()
-    run(player, train_env, logger, episode=1000, batch_size=4, memory_size=1024, test_env=test_env)
+    run(player, train_env, logger, episode=2000, batch_size=128, memory_size=1024, test_env=test_env)
 
     player.actor.save_weights("model/actor_weight.h5")
     player.critic.save_weights("model/critic_weight.h5")

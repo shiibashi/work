@@ -77,7 +77,8 @@ class Player(object):
         policy = self.actor.predict([csv, img], batch_size=1).flatten()
         noise = numpy.random.uniform(0, 1, self.action_size)
         p = (policy + noise) / (policy + noise).sum()
-        return numpy.random.choice(self.action_size, 1, p=p)[0]
+        a = numpy.random.choice(self.action_size, 1, p=p)[0]
+        return a
 
     def get_action_prob(self, state):
         csv, img = state

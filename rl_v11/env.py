@@ -13,7 +13,7 @@ class Env(object):
         
         self.action_size = 3
         self.csv_size = (5, )
-        self.img_size = (180, 180, 3)
+        self.img_size = (250, 250, 3)
         
         self.state = None
         
@@ -28,13 +28,14 @@ class Env(object):
         next_obs = self.observation(self.episode_df, self.time)
         return next_obs, reward, done, {}
         
-    def reset(self):
+    def reset(self, index=None):
         self.time = 0
         self.capability = 1
         self.cut_line = 0.9
         
         episode_length = 24 * 14
-        index = numpy.random.randint(len(self.dataset) - episode_length)
+        if index is None:
+            index = numpy.random.randint(len(self.dataset) - episode_length)
         self.episode_df = self.dataset[index:index+episode_length].reset_index(drop=True)
         return self.observation(self.episode_df, self.time)
 
@@ -62,8 +63,9 @@ class Env(object):
             return True
         
     def _load_chart_img(self, df, time):
-        #timestamp = df["Timestamp"][time]
-        timestamp = 1333041840
+        timestamp = df["Timestamp"][time]
+        #timestamp = 1333041840
         img_arr = cv2.imread("dataset/img/{}.png".format(timestamp))
+        img_arr = cv2.resize(img_arr, dsize=(250, 250))
         assert img_arr is not None
-        return numpy.array([img_arr]) # 1, 180, 180, 3
+        return numpy.array([img_arr]) # 1, 250, 250, 3

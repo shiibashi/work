@@ -8,6 +8,7 @@ import gc
 def plot(logger):
     _plot(logger.train_log, "train.png")
     _plot(logger.test_log, "test.png")
+    _plot(logger.test2_log, "test2.png")
 
 def _plot(log, filepath):
     n = len(log)
