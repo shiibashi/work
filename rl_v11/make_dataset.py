@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import mpl_finance
 import gc
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 
 
 class PipeLine(object):
@@ -112,8 +112,8 @@ if __name__ == "__main__":
             save_candlestick_img_with_volume(chart_data, "dataset/img/{}".format(filename))
 
     #print("iteration: {}".format(len(feature)-24*5), flush=True)
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        for i in range(len(feature)-24*5):
+    with ProcessPoolExecutor(max_workers=3) as executor:
+        for i in range(len(feature)-24*7):
             executor.submit(_task, i)
 
     #for i in range(len(feature)-24*5):
