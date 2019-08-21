@@ -8,17 +8,24 @@ from keras.layers.normalization import BatchNormalization
 from keras import Input, Sequential
 from keras.optimizers import SGD
 
-
+from sklearn import linear_model
 
 class Player(object):
-    def __init__(self, action_size, csv_size, img_size):
+    def __init__(self, action_size, csv_size, img_size, no_img=False):
         self.csv_shape = csv_size
         self.img_shape = img_size
         self.action_size = action_size
         self.value_size = 1
+        self.no_img = no_img
+        
+        if self.no_img:
+            self.actor = linear_model.SGDClassifier()
+            self.critic = None
+        else:
+            self.actor = self.build_actor()
+            self.critic = self.build_critic()
 
-        self.actor = self.build_actor()
-        self.critic = self.build_critic()
+    
     
     def build_actor(self):
         input_csv = Input(name="input_csv", shape=self.csv_shape)
