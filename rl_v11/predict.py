@@ -4,9 +4,9 @@ import numpy
 import pandas
 
 def load_dataset():
-    df = pandas.read_csv("dataset/feature.csv")
-    train_df = df[10000:20000].reset_index(drop=True)
-    test_df = df[20000:].reset_index(drop=True)
+    df = pandas.read_csv("dataset/feature_normalized.csv")
+    train_df = df[15800:23200].reset_index(drop=True)
+    test_df = df[25000:35000].reset_index(drop=True)
     return train_df, test_df
 
 def main():

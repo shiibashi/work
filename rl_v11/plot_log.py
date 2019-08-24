@@ -20,3 +20,14 @@ def _plot(log, filepath):
     plt.savefig(filepath)
     plt.close("all")
     gc.collect()
+
+def _plot_all(log, filepath):
+    n = len(log)
+    v = [t[-1] for t in log]
+    x = numpy.array(range(n))
+    cutline = x * 0 + 0.9
+    plt.scatter(x, v, c="r")
+    plt.plot(x, cutline, c="b")
+    plt.savefig(filepath)
+    plt.close("all")
+    gc.collect()

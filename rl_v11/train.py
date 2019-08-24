@@ -21,6 +21,10 @@ class Logger(object):
     def append_test2_log(self, d):
         self.test2_log.append(d)
 
+    def save(self, log, filename):
+        arr = numpy.array(log)
+        numpy.save(filename, arr)
+
         
 def run(player, env, logger,
         episode=100, batch_size=32, memory_size=1024, test_env=None):
@@ -44,18 +48,19 @@ def run(player, env, logger,
 
         logger.append_train_log(capability_list)
 
-        if test_env is not None:
+        if test_env is not None and e % 5 == 0:
             p = validation(player, test_env)
             logger.append_test_log(p)
-            p2 = validation(player, test_env, index=0)
+            p2 = validation(player, test_env, index=1, all_length=True)
             logger.append_test2_log(p2)
+            print("episode: {}, val_cap: {}, live_time: {}".format(e, p2[-1], len(p2)), flush=True)
         
-def validation(player, env, index=None):
+def validation(player, env, index=None, all_length=False):
     done= False
     capability_list = []
-    state = env.reset(index)
+    state = env.reset(index, all_length=all_length)
     while not done:
-        action_prob = player.get_action_prob(state)
+        action_prob = player.get_action(state)
         action = numpy.argmax(action_prob)
         next_state, reward, done, info = env.step(action)
         state = next_state
@@ -83,9 +88,9 @@ def _v(arr_list):
 
 
 def load_dataset():
-    df = pandas.read_csv("dataset/feature.csv")
-    train_df = df[10000:20000].reset_index(drop=True)
-    test_df = df[20000:].reset_index(drop=True)
+    df = pandas.read_csv("dataset/feature_normalized.csv")
+    train_df = df[15800:23200].reset_index(drop=True)
+    test_df = df[25000:35000].reset_index(drop=True)
     return train_df, test_df
 
 
@@ -97,11 +102,12 @@ def train():
     action_size, csv_size, img_size = train_env.action_size, train_env.csv_size, train_env.img_size
     player = Player(action_size, csv_size, img_size)
     logger = Logger()
-    run(player, train_env, logger, episode=2000, batch_size=128, memory_size=1024, test_env=test_env)
+    run(player, train_env, logger, episode=40, batch_size=1024, memory_size=4096, test_env=test_env)
 
     player.actor.save_weights("model/actor_weight.h5")
     player.critic.save_weights("model/critic_weight.h5")
     plot_log.plot(logger)
+    logger.save(logger.test2_log, "test_log.npy")
 
 if __name__ == "__main__":
     train()

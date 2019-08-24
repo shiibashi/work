@@ -89,8 +89,11 @@ if __name__ == "__main__":
 
     pipeline = PipeLine()
     feature = pipeline.run(df)
-
     feature.to_csv("dataset/feature.csv", index=False)
+    for col in ["Open_MA_5_N", "Open_MA_25_N", "Open_MA_75_N", "Open_R_1"]:
+        s = feature[col]
+        feature[col] = (s - s.min()) / (s - s.min()).max()
+    feature.to_csv("dataset/feature_normalized.csv", index=False)
 
     try:
         os.mkdir("dataset/img")

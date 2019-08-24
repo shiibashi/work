@@ -18,8 +18,8 @@ class Env(object):
         self.state = None
         
         self.time = None
-        self.capability = None
-        self.cut_line = None
+        self.capability = 1
+        self.cut_line = 0.7
                 
     def step(self, action):
         reward = self.reward(action, self.episode_df, self.time)
@@ -28,15 +28,19 @@ class Env(object):
         next_obs = self.observation(self.episode_df, self.time)
         return next_obs, reward, done, {}
         
-    def reset(self, index=None):
+    def reset(self, index=None, all_length=False):
         self.time = 0
         self.capability = 1
-        self.cut_line = 0.9
+        self.cut_line = 0.7
         
         episode_length = 24 * 14
         if index is None:
             index = numpy.random.randint(len(self.dataset) - episode_length)
-        self.episode_df = self.dataset[index:index+episode_length].reset_index(drop=True)
+
+        if all_length:
+            self.episode_df = self.dataset[index:].reset_index(drop=True)
+        else:
+            self.episode_df = self.dataset[index:index+episode_length].reset_index(drop=True)
         return self.observation(self.episode_df, self.time)
 
     def observation(self, df, time):
@@ -53,7 +57,12 @@ class Env(object):
         if action == 2: # short
             action = -1
         
-        self.capability += profit * action
+        if action == 1:
+            self.capability +=  profit * action
+        else:
+            self.capability += profit * action
+        if action == 0:
+            self.capability -= 0
         return max(0, self.capability - self.cut_line)
         
     def done_flag(self, df, time):
@@ -65,7 +74,11 @@ class Env(object):
     def _load_chart_img(self, df, time):
         timestamp = df["Timestamp"][time]
         #timestamp = 1333041840
-        img_arr = cv2.imread("dataset/img/{}.png".format(timestamp))
-        img_arr = cv2.resize(img_arr, dsize=(250, 250))
-        assert img_arr is not None
+        img_arr = cv2.imread("dataset/img/{}.png".format(timestamp)).astype(numpy.float)
+        assert img_arr is not None, "timestamp: {}".format(timestamp)
+        #print(img_arr)
+        img_arr = cv2.resize(img_arr, dsize=(250, 250)) / 255
+        #print(img_arr)
+        #print(img_arr.astype)
+        #assert False
         return numpy.array([img_arr]) # 1, 250, 250, 3
